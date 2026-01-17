@@ -152,12 +152,20 @@ public class IonToParquet extends AbstractAvroConverter implements RunnableTask<
 
         // avro schema
         var schemaParser = new Schema.Parser();
-        Schema schema = null;
+        Schema schema;
         if(this.schema == null){
-            var inputStreamForInfer = new InputStreamReader(runContext.storage().getFile(from));
-            var schemaOutputStream = new ByteArrayOutputStream();
-            new InferAvroSchema().inferAvroSchemaFromIon(inputStreamForInfer, schemaOutputStream);
-            schema = schemaParser.parse(schemaOutputStream.toString());
+            // Infer schema from ION file
+            try (InputStreamReader inputStreamForInfer = new InputStreamReader(runContext.storage().getFile(from));
+                 ByteArrayOutputStream schemaOutputStream = new ByteArrayOutputStream()) {
+                new InferAvroSchema(
+                    runContext.render(this.getNumberOfRowsToScan()).as(Integer.class).orElse(100)
+                ).inferAvroSchemaFromIon(inputStreamForInfer, schemaOutputStream);
+                String inferredSchemaString = schemaOutputStream.toString();
+                if (inferredSchemaString == null || inferredSchemaString.isBlank()) {
+                    throw new IllegalStateException("Cannot infer Avro schema from ION input: the file appears to be empty or contains no valid records.");
+                }
+                schema = schemaParser.parse(inferredSchemaString);
+            }
         } else {
             schema = schemaParser.parse(runContext.render(this.schema));
         }

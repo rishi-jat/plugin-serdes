@@ -141,4 +141,33 @@ class IonToAvroTest {
             writer.run(TestsUtils.mockRunContext(runContextFactory, writer, ImmutableMap.of()));
         }
     }
+
+    @Test
+    void inferenceFailsOnEmptyFile() throws Exception {
+        File tempFile = File.createTempFile(this.getClass().getSimpleName().toLowerCase() + "_empty_", ".ion");
+        // Write nothing to the file - it's empty
+
+        try (InputStream inputStream = new FileInputStream(tempFile)) {
+            URI uri = storageInterface.put(
+                TenantService.MAIN_TENANT,
+                null,
+                URI.create("/" + IdUtils.create() + ".ion"),
+                inputStream
+            );
+
+            IonToAvro writer = IonToAvro.builder()
+                .id(IonToAvro.class.getSimpleName())
+                .type(IonToAvro.class.getName())
+                .from(Property.ofValue(uri.toString()))
+                .schema(null) // No schema - inference required
+                .build();
+
+            IllegalStateException exception = org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalStateException.class,
+                () -> writer.run(TestsUtils.mockRunContext(runContextFactory, writer, ImmutableMap.of()))
+            );
+
+            assertThat(exception.getMessage(), org.hamcrest.Matchers.containsString("Cannot infer Avro schema from ION input"));
+        }
+    }
 }
